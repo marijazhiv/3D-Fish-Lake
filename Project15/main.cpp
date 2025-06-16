@@ -1,5 +1,4 @@
-//Marija Živanovi?, SV19/2021
-// Opis: Testiranje dubine, Uklanjanje lica, Transformacije, Prostori i Projekcije
+//Marija Živanoviæ, SV19/2021
 
 #include <GL/glew.h> 
 #include <GLFW/glfw3.h>
@@ -49,7 +48,7 @@ struct Fish {
 
 std::vector<Fish> fishes;
 
-// Shaders za 3D scene (ribice i jezero)
+// shaders za 3D scene (ribice i jezero)
 const char* vertexShaderSource = R"glsl(
 #version 330 core
 layout (location = 0) in vec3 aPos;
@@ -70,7 +69,7 @@ void main() {
 }
 )glsl";
 
-// Shaders za 2D prikaz potpisa (teksture sa alfom)
+// shaders za 2D prikaz potpisa
 const char* vertexShader2DSource = R"glsl(
 #version 330 core
 layout (location = 0) in vec2 aPos;
@@ -128,27 +127,27 @@ unsigned int lakeIndices[] = {
 
 
 float fishVertices[] = {
-    // Telo (piramida)
+    // telo (piramida)
      0.0f,  0.0f,  0.2f,  // vrh
-    -0.1f, -0.1f, -0.1f,  // baza
+    -0.1f, -0.1f, -0.1f,  // dno
      0.1f, -0.1f, -0.1f,
      0.0f,  0.1f, -0.1f,
 
-     // Repiæ (piramida)
+     // repiæ (piramida)
       0.0f,  0.0f, -0.2f,  // vrh repa
-     -0.05f, -0.05f, -0.1f, // baza repa
+     -0.05f, -0.05f, -0.1f, // dno repa
       0.05f, -0.05f, -0.1f,
       0.0f,  0.05f, -0.1f
 };
 
 unsigned int fishIndices[] = {
-    // Telo
+    // telo
     0, 1, 2,
     0, 2, 3,
     0, 3, 1,
     1, 2, 3,
 
-    // Rep
+    // rep
     4, 5, 6,
     4, 6, 7,
     4, 7, 5,
@@ -163,7 +162,6 @@ void generateFishes(int count) {
         fish.radius = 2.0f + static_cast<float>(rand() % 500) / 100.0f;
         fish.speed = 10.0f + static_cast<float>(rand() % 100) / 10.0f;
 
-        // Poveæana velièina
         fish.size = (0.3f + static_cast<float>(rand() % 100) / 300.0f) * 2.5f;
 
         fish.color = glm::vec3(static_cast<float>(rand()) / RAND_MAX,
@@ -217,10 +215,11 @@ int main() {
         std::cout << "Failed to initialize GLEW" << std::endl;
         return -1;
     }
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);         // Omoguæava face culling
-    glCullFace(GL_BACK);            // Ignoriši zadnje strane (default)
-    glFrontFace(GL_CCW);            // Smatraj da su prednje strane one sa CCW rasporedom verteksa
+    glEnable(GL_DEPTH_TEST);        //depth testing
+
+    glEnable(GL_CULL_FACE);         //face culling
+    glCullFace(GL_BACK);           
+    glFrontFace(GL_CCW);            
 
     glfwSetScrollCallback(window, scroll_callback);
 
@@ -231,7 +230,7 @@ int main() {
     glAttachShader(shaderProgram, fragmentShader);
     glLinkProgram(shaderProgram);
 
-    // Setup za jezero
+    //lake setup
     GLuint lakeVAO, lakeVBO, lakeEBO;
     glGenVertexArrays(1, &lakeVAO);
     glGenBuffers(1, &lakeVBO);
@@ -245,7 +244,7 @@ int main() {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    // Setup za ribice
+    //fishes setup
     GLuint fishVAO, fishVBO, fishEBO;
     glGenVertexArrays(1, &fishVAO);
     glGenBuffers(1, &fishVBO);
@@ -261,9 +260,6 @@ int main() {
 
     generateFishes(20);
 
-    // --- Setup za prikaz potpisa ---
-
-    // Shaderi za 2D teksturu
     GLuint vertexShader2D = compileShader(GL_VERTEX_SHADER, vertexShader2DSource);
     GLuint fragmentShader2D = compileShader(GL_FRAGMENT_SHADER, fragmentShader2DSource);
     GLuint shaderProgram2D = glCreateProgram();
@@ -271,18 +267,14 @@ int main() {
     glAttachShader(shaderProgram2D, fragmentShader2D);
     glLinkProgram(shaderProgram2D);
 
-    // Vertexi za kvadrat (2D quad) za prikaz potpisa u NDC prostoru
-    // Pozicija u normalized device coordinates (NDC): x, y
-    // Koordinate teksture: s, t
+    // vertexi za kvadrat (2D quad) za prikaz potpisa u NDC prostoru
     float quadVertices[] = {
         // Positions   // TexCoords
-        -1.0f, -1.0f,  0.0f, 0.0f,   // donji levi ugao
-        -0.5f, -1.0f,  1.0f, 0.0f,   // donji desni ugao (širi)
-        -0.5f, -0.9f,  1.0f, 1.0f,   // gornji desni ugao
-        -1.0f, -0.9f,  0.0f, 1.0f    // gornji levi ugao
+        -1.0f, -1.0f,  0.0f, 0.0f,   
+        -0.5f, -1.0f,  1.0f, 0.0f,   
+        -0.5f, -0.9f,  1.0f, 1.0f,   
+        -1.0f, -0.9f,  0.0f, 1.0f   
     };
-
-
 
     unsigned int quadIndices[] = {
         0, 1, 2,
@@ -300,17 +292,17 @@ int main() {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quadEBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(quadIndices), quadIndices, GL_STATIC_DRAW);
 
-    // Pozicija
+    
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-    // Koordinate teksture
+   
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    // Uèitavanje teksture potpisa
+    //loading signature texture
     int texWidth, texHeight, texChannels;
     stbi_set_flip_vertically_on_load(true);
-    unsigned char* data = stbi_load("MZZ.png", &texWidth, &texHeight, &texChannels, 4);
+    unsigned char* data = stbi_load("signature.png", &texWidth, &texHeight, &texChannels, 4);
     if (!data) {
         std::cout << "Failed to load signature texture" << std::endl;
     }
@@ -322,7 +314,6 @@ int main() {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texWidth, texHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
     glGenerateMipmap(GL_TEXTURE_2D);
 
-    // Set texture wrapping/filtering options (recommended)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -330,7 +321,6 @@ int main() {
 
     stbi_image_free(data);
 
-    // Omoguæavamo blend za transparentnost
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -341,10 +331,9 @@ int main() {
         auto frameStart = clock::now();
 
         processInput(window);
-        glClearColor(0.96f, 0.87f, 0.70f, 1.0f); // Boja peska
+        glClearColor(0.96f, 0.87f, 0.70f, 1.0f); // boja peska
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Crtamo 3D scenu
         glUseProgram(shaderProgram);
 
         glm::vec3 camPos(0.0f, cameraDistance, 0.01f);
@@ -356,7 +345,7 @@ int main() {
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
-        // Jezero
+        //lake
         GLuint colorLoc = glGetUniformLocation(shaderProgram, "color");
         GLuint modelLoc = glGetUniformLocation(shaderProgram, "model");
         glm::mat4 lakeModel = glm::mat4(1.0f);
@@ -365,7 +354,7 @@ int main() {
         glBindVertexArray(lakeVAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-        // Ribice
+        //fishes
         glBindVertexArray(fishVAO);
         for (auto& fish : fishes) {
             fish.angle += fish.speed * 0.1f;
@@ -382,20 +371,19 @@ int main() {
             glDrawElements(GL_TRIANGLES, sizeof(fishIndices) / sizeof(unsigned int), GL_UNSIGNED_INT, 0);
         }
 
-        // Crtamo potpis preko 3D scene (2D)
+        //signature
         glUseProgram(shaderProgram2D);
         glBindVertexArray(quadVAO);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, signatureTexture);
         glUniform1i(glGetUniformLocation(shaderProgram2D, "texture1"), 0);
 
-        // Blending veæ ukljuèen
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
 
-        // Kontrola frame rate-a na 60 FPS
+        //frame rate control at 60 fps
         auto frameEnd = clock::now();
         auto elapsed = frameEnd - frameStart;
         if (elapsed < frameDuration) {
