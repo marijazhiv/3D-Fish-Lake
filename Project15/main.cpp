@@ -1,4 +1,4 @@
-//Marija Živanoviæ, SV19/2021
+//Marija Živanovi?, SV19/2021
 // Opis: Testiranje dubine, Uklanjanje lica, Transformacije, Prostori i Projekcije
 
 #include <GL/glew.h>
@@ -13,13 +13,16 @@
 #include <cstdlib>
 #include <ctime>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+
 const unsigned int WIDTH = 800;
 const unsigned int HEIGHT = 600;
 
 float fov = 45.0f;
 float cameraDistance = 20.0f;
 
-// Granice za brzinu i radijus
 const float minSpeed = 1.0f;
 const float maxSpeed = 50.0f;
 const float speedStep = 1.0f;
@@ -30,8 +33,6 @@ const float radiusStep = 0.2f;
 
 bool wPressedLastFrame = false;
 bool sPressedLastFrame = false;
-
-
 bool aPressedLastFrame = false;
 bool dPressedLastFrame = false;
 
@@ -45,6 +46,7 @@ struct Fish {
 
 std::vector<Fish> fishes;
 
+// Shaders za 3D scene (ribice i jezero)
 const char* vertexShaderSource = R"glsl(
 #version 330 core
 layout (location = 0) in vec3 aPos;
@@ -65,19 +67,41 @@ void main() {
 }
 )glsl";
 
-// Kontrola zooma
+// Shaders za 2D prikaz potpisa (teksture sa alfom)
+const char* vertexShader2DSource = R"glsl(
+#version 330 core
+layout (location = 0) in vec2 aPos;
+layout (location = 1) in vec2 aTexCoord;
+out vec2 TexCoord;
+void main() {
+    gl_Position = vec4(aPos, 0.0, 1.0);
+    TexCoord = aTexCoord;
+}
+)glsl";
+
+const char* fragmentShader2DSource = R"glsl(
+#version 330 core
+in vec2 TexCoord;
+out vec4 FragColor;
+uniform sampler2D texture1;
+void main() {
+    vec4 sampled = texture(texture1, TexCoord);
+    if(sampled.a < 0.1)
+        discard;
+    FragColor = sampled;
+}
+)glsl";
+
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     fov -= (float)yoffset;
     if (fov < 10.0f) fov = 10.0f;
     if (fov > 90.0f) fov = 90.0f;
 }
 
-// Kompajliranje shadera
 GLuint compileShader(GLenum type, const char* source) {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, NULL);
     glCompileShader(shader);
-    // Provera gresaka
     int success;
     char infoLog[512];
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
@@ -101,9 +125,31 @@ unsigned int lakeIndices[] = {
 };
 
 float fishVertices[] = {
-    0.0f,  0.0f, 0.0f,
-    -0.2f, 0.0f, -0.1f,
-    -0.2f, 0.0f,  0.1f
+    // Telo (piramida)
+     0.0f,  0.0f,  0.2f,  // vrh
+    -0.1f, -0.1f, -0.1f,  // baza
+     0.1f, -0.1f, -0.1f,
+     0.0f,  0.1f, -0.1f,
+
+     // Repiæ (piramida)
+      0.0f,  0.0f, -0.2f,  // vrh repa
+     -0.05f, -0.05f, -0.1f, // baza repa
+      0.05f, -0.05f, -0.1f,
+      0.0f,  0.05f, -0.1f
+};
+
+unsigned int fishIndices[] = {
+    // Telo
+    0, 1, 2,
+    0, 2, 3,
+    0, 3, 1,
+    1, 2, 3,
+
+    // Rep
+    4, 5, 6,
+    4, 6, 7,
+    4, 7, 5,
+    5, 6, 7
 };
 
 void generateFishes(int count) {
@@ -111,9 +157,12 @@ void generateFishes(int count) {
     for (int i = 0; i < count; ++i) {
         Fish fish;
         fish.angle = static_cast<float>(rand() % 360);
-        fish.radius = 2.0f + static_cast<float>(rand() % 500) / 100.0f; // 2.0 - 7.0
-        fish.speed = 10.0f + static_cast<float>(rand() % 100) / 10.0f; // 10.0 - 20.0
-        fish.size = 0.3f + static_cast<float>(rand() % 100) / 300.0f;
+        fish.radius = 2.0f + static_cast<float>(rand() % 500) / 100.0f;
+        fish.speed = 10.0f + static_cast<float>(rand() % 100) / 10.0f;
+
+        // Poveæana velièina
+        fish.size = (0.3f + static_cast<float>(rand() % 100) / 300.0f) * 2.5f;
+
         fish.color = glm::vec3(static_cast<float>(rand()) / RAND_MAX,
             static_cast<float>(rand()) / RAND_MAX,
             static_cast<float>(rand()) / RAND_MAX);
@@ -121,62 +170,51 @@ void generateFishes(int count) {
     }
 }
 
-// Obrada tastera W, S, A, D za kontrolu brzine i radijusa ribica
 void processInput(GLFWwindow* window) {
-    bool wPressedNow = (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS);
-    bool sPressedNow = (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS);
-    bool aPressedNow = (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS);
-    bool dPressedNow = (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS);
+    bool w = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
+    bool s = glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS;
+    bool a = glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS;
+    bool d = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
 
-    // Poveæaj brzinu samo ako je W upravo pritisnut
-    if (wPressedNow && !wPressedLastFrame) {
-        for (auto& fish : fishes) {
-            fish.speed += speedStep;
-            if (fish.speed > maxSpeed) fish.speed = maxSpeed;
-        }
-    }
 
-    // Smanji brzinu samo ako je S upravo pritisnut
-    if (sPressedNow && !sPressedLastFrame) {
-        for (auto& fish : fishes) {
-            fish.speed -= speedStep;
-            if (fish.speed < minSpeed) fish.speed = minSpeed;
-        }
-    }
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
 
-    // Poveæaj radijus samo ako je A upravo pritisnut
-    if (aPressedNow && !aPressedLastFrame) {
-        for (auto& fish : fishes) {
-            fish.radius += radiusStep;
-            if (fish.radius > maxRadius) fish.radius = maxRadius;
-        }
-    }
+    if (w && !wPressedLastFrame)
+        for (auto& f : fishes) f.speed = std::min(f.speed + speedStep, maxSpeed);
 
-    // Smanji radijus samo ako je D upravo pritisnut
-    if (dPressedNow && !dPressedLastFrame) {
-        for (auto& fish : fishes) {
-            fish.radius -= radiusStep;
-            if (fish.radius < minRadius) fish.radius = minRadius;
-        }
-    }
+    if (s && !sPressedLastFrame)
+        for (auto& f : fishes) f.speed = std::max(f.speed - speedStep, minSpeed);
 
-    // Update stanja za sledeæi frame
-    wPressedLastFrame = wPressedNow;
-    sPressedLastFrame = sPressedNow;
-    aPressedLastFrame = aPressedNow;
-    dPressedLastFrame = dPressedNow;
+    if (a && !aPressedLastFrame)
+        for (auto& f : fishes) f.radius = std::min(f.radius + radiusStep, maxRadius);
+
+    if (d && !dPressedLastFrame)
+        for (auto& f : fishes) f.radius = std::max(f.radius - radiusStep, minRadius);
+
+    wPressedLastFrame = w;
+    sPressedLastFrame = s;
+    aPressedLastFrame = a;
+    dPressedLastFrame = d;
 }
-
 
 int main() {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "3D Jezero s ribicama - Kontrola", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "3D Ribice u Jezeru", NULL, NULL);
+    if (!window) {
+        std::cout << "Failed to create GLFW window" << std::endl;
+        glfwTerminate();
+        return -1;
+    }
     glfwMakeContextCurrent(window);
-    glewInit();
+    glewExperimental = GL_TRUE;
+    if (glewInit() != GLEW_OK) {
+        std::cout << "Failed to initialize GLEW" << std::endl;
+        return -1;
+    }
     glEnable(GL_DEPTH_TEST);
-
     glfwSetScrollCallback(window, scroll_callback);
 
     GLuint vertexShader = compileShader(GL_VERTEX_SHADER, vertexShaderSource);
@@ -186,6 +224,7 @@ int main() {
     glAttachShader(shaderProgram, fragmentShader);
     glLinkProgram(shaderProgram);
 
+    // Setup za jezero
     GLuint lakeVAO, lakeVBO, lakeEBO;
     glGenVertexArrays(1, &lakeVAO);
     glGenBuffers(1, &lakeVBO);
@@ -199,71 +238,152 @@ int main() {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    GLuint fishVAO, fishVBO;
+    // Setup za ribice
+    GLuint fishVAO, fishVBO, fishEBO;
     glGenVertexArrays(1, &fishVAO);
     glGenBuffers(1, &fishVBO);
+    glGenBuffers(1, &fishEBO);
+
     glBindVertexArray(fishVAO);
     glBindBuffer(GL_ARRAY_BUFFER, fishVBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(fishVertices), fishVertices, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, fishEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(fishIndices), fishIndices, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
     generateFishes(20);
 
+    // --- Setup za prikaz potpisa ---
+
+    // Shaderi za 2D teksturu
+    GLuint vertexShader2D = compileShader(GL_VERTEX_SHADER, vertexShader2DSource);
+    GLuint fragmentShader2D = compileShader(GL_FRAGMENT_SHADER, fragmentShader2DSource);
+    GLuint shaderProgram2D = glCreateProgram();
+    glAttachShader(shaderProgram2D, vertexShader2D);
+    glAttachShader(shaderProgram2D, fragmentShader2D);
+    glLinkProgram(shaderProgram2D);
+
+    // Vertexi za kvadrat (2D quad) za prikaz potpisa u NDC prostoru
+    // Pozicija u normalized device coordinates (NDC): x, y
+    // Koordinate teksture: s, t
+    float quadVertices[] = {
+        // Positions   // TexCoords
+        -1.0f, -1.0f,  0.0f, 0.0f,   // donji levi ugao
+        -0.5f, -1.0f,  1.0f, 0.0f,   // donji desni ugao (širi)
+        -0.5f, -0.9f,  1.0f, 1.0f,   // gornji desni ugao
+        -1.0f, -0.9f,  0.0f, 1.0f    // gornji levi ugao
+    };
+
+
+
+
+    unsigned int quadIndices[] = {
+        0, 1, 2,
+        2, 3, 0
+    };
+
+    GLuint quadVAO, quadVBO, quadEBO;
+    glGenVertexArrays(1, &quadVAO);
+    glGenBuffers(1, &quadVBO);
+    glGenBuffers(1, &quadEBO);
+
+    glBindVertexArray(quadVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quadEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(quadIndices), quadIndices, GL_STATIC_DRAW);
+
+    // Pozicija
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // Koordinate teksture
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    // Uèitavanje teksture potpisa
+    int texWidth, texHeight, texChannels;
+    stbi_set_flip_vertically_on_load(true);
+    unsigned char* data = stbi_load("MZZ.png", &texWidth, &texHeight, &texChannels, 4);
+    if (!data) {
+        std::cout << "Failed to load signature texture" << std::endl;
+    }
+
+    GLuint signatureTexture;
+    glGenTextures(1, &signatureTexture);
+    glBindTexture(GL_TEXTURE_2D, signatureTexture);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texWidth, texHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    // Set texture wrapping/filtering options (recommended)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    stbi_image_free(data);
+
+    // Omoguæavamo blend za transparentnost
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
     while (!glfwWindowShouldClose(window)) {
         processInput(window);
-
-        glClearColor(0.5f, 0.8f, 1.0f, 1.0f);
+        glClearColor(0.96f, 0.87f, 0.70f, 1.0f); // Boja peska
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        // Crtamo 3D scenu
         glUseProgram(shaderProgram);
 
-        glm::vec3 cameraPos = glm::vec3(0.0f, cameraDistance, 0.01f);
-        glm::vec3 target = glm::vec3(0.0f, 0.0f, 0.0f);
-        glm::vec3 up = glm::vec3(0.0f, 0.0f, -1.0f);
-        glm::mat4 view = glm::lookAt(cameraPos, target, up);
+        glm::vec3 camPos(0.0f, cameraDistance, 0.01f);
+        glm::mat4 view = glm::lookAt(camPos, glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
         glm::mat4 projection = glm::perspective(glm::radians(fov), (float)WIDTH / HEIGHT, 0.1f, 100.0f);
 
-        GLuint modelLoc = glGetUniformLocation(shaderProgram, "model");
         GLuint viewLoc = glGetUniformLocation(shaderProgram, "view");
         GLuint projLoc = glGetUniformLocation(shaderProgram, "projection");
-        GLuint colorLoc = glGetUniformLocation(shaderProgram, "color");
-
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
         // Jezero
+        GLuint colorLoc = glGetUniformLocation(shaderProgram, "color");
+        GLuint modelLoc = glGetUniformLocation(shaderProgram, "model");
+        glm::mat4 lakeModel = glm::mat4(1.0f);
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(lakeModel));
+        glUniform3f(colorLoc, 0.0f, 0.5f, 1.0f);
         glBindVertexArray(lakeVAO);
-        glm::mat4 model = glm::mat4(1.0f);
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform3f(colorLoc, 0.2f, 0.4f, 0.9f);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
         // Ribice
         glBindVertexArray(fishVAO);
-        float time = glfwGetTime();
         for (auto& fish : fishes) {
-            float x = fish.radius * cos(glm::radians(fish.angle + time * fish.speed));
-            float z = fish.radius * sin(glm::radians(fish.angle + time * fish.speed));
+            fish.angle += fish.speed * 0.01f;
+            float x = fish.radius * cos(glm::radians(fish.angle));
+            float z = fish.radius * sin(glm::radians(fish.angle));
 
-            model = glm::mat4(1.0f);
+            glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, glm::vec3(x, 0.1f, z));
+            model = glm::rotate(model, glm::radians(-fish.angle), glm::vec3(0.0f, 1.0f, 0.0f));
             model = glm::scale(model, glm::vec3(fish.size));
+
             glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-            glUniform3f(colorLoc, fish.color.r, fish.color.g, fish.color.b);
-            glDrawArrays(GL_TRIANGLES, 0, 3);
+            glUniform3fv(colorLoc, 1, glm::value_ptr(fish.color));
+            glDrawElements(GL_TRIANGLES, sizeof(fishIndices) / sizeof(unsigned int), GL_UNSIGNED_INT, 0);
         }
+
+        // Crtamo potpis preko 3D scene (2D)
+        glUseProgram(shaderProgram2D);
+        glBindVertexArray(quadVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, signatureTexture);
+        glUniform1i(glGetUniformLocation(shaderProgram2D, "texture1"), 0);
+
+        // Blending veæ ukljuèen
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
-
-    glDeleteVertexArrays(1, &lakeVAO);
-    glDeleteBuffers(1, &lakeVBO);
-    glDeleteBuffers(1, &lakeEBO);
-    glDeleteVertexArrays(1, &fishVAO);
-    glDeleteBuffers(1, &fishVBO);
-    glDeleteProgram(shaderProgram);
 
     glfwTerminate();
     return 0;
