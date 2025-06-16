@@ -121,11 +121,11 @@ float lakeVertices[] = {
      10.0f, 0.0f,  10.0f,
     -10.0f, 0.0f,  10.0f
 };
-
 unsigned int lakeIndices[] = {
-    0, 1, 2,
-    2, 3, 0
+    0, 2, 1,
+    0, 3, 2
 };
+
 
 float fishVertices[] = {
     // Telo (piramida)
@@ -218,6 +218,10 @@ int main() {
         return -1;
     }
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);         // Omoguæava face culling
+    glCullFace(GL_BACK);            // Ignoriši zadnje strane (default)
+    glFrontFace(GL_CCW);            // Smatraj da su prednje strane one sa CCW rasporedom verteksa
+
     glfwSetScrollCallback(window, scroll_callback);
 
     GLuint vertexShader = compileShader(GL_VERTEX_SHADER, vertexShaderSource);
