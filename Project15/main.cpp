@@ -1,7 +1,7 @@
 //Marija Živanovi?, SV19/2021
 // Opis: Testiranje dubine, Uklanjanje lica, Transformacije, Prostori i Projekcije
 
-#include <GL/glew.h>
+#include <GL/glew.h> 
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -12,6 +12,9 @@
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
+
+#include <chrono>
+#include <thread>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -277,7 +280,6 @@ int main() {
 
 
 
-
     unsigned int quadIndices[] = {
         0, 1, 2,
         2, 3, 0
@@ -328,7 +330,12 @@ int main() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+    using clock = std::chrono::high_resolution_clock;
+    const std::chrono::duration<double, std::milli> frameDuration(1000.0 / 60.0); // ~16.6667ms per frame
+
     while (!glfwWindowShouldClose(window)) {
+        auto frameStart = clock::now();
+
         processInput(window);
         glClearColor(0.96f, 0.87f, 0.70f, 1.0f); // Boja peska
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -357,7 +364,7 @@ int main() {
         // Ribice
         glBindVertexArray(fishVAO);
         for (auto& fish : fishes) {
-            fish.angle += fish.speed * 0.01f;
+            fish.angle += fish.speed * 0.1f;
             float x = fish.radius * cos(glm::radians(fish.angle));
             float z = fish.radius * sin(glm::radians(fish.angle));
 
@@ -383,6 +390,13 @@ int main() {
 
         glfwSwapBuffers(window);
         glfwPollEvents();
+
+        // Kontrola frame rate-a na 60 FPS
+        auto frameEnd = clock::now();
+        auto elapsed = frameEnd - frameStart;
+        if (elapsed < frameDuration) {
+            std::this_thread::sleep_for(frameDuration - elapsed);
+        }
     }
 
     glfwTerminate();
